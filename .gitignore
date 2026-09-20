@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# NuGet
+packages/
+*.nupkg
+
+# Model weights are dropped in per install, not committed
+src/CMS.App/Models/*.onnx
+
+# Local runtime data
+*.db
+*.db-shm
+*.db-wal
