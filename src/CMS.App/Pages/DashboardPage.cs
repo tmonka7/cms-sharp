@@ -120,7 +120,8 @@ public sealed class DashboardPage : PageBase
 
         _overviewCard.SetBounds(area.X, bodyY, leftWidth, bodyHeight);
 
-        var statusHeight = 156;
+        // Title row plus three 36px meter rows plus padding.
+        var statusHeight = 180;
         var eventsHeight = Math.Max(140, bodyHeight - statusHeight - gap);
 
         _eventsCard.SetBounds(area.X + leftWidth + gap, bodyY, rightWidth, eventsHeight);

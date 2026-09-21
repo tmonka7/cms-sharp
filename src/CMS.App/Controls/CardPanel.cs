@@ -117,6 +117,7 @@ public class CardPanel : Panel
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var bounds = new Rectangle(0, 0, Width, Height);
         Theme.DrawCard(g, bounds, _fill, _borderColor, _radius);

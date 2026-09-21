@@ -194,6 +194,7 @@ public sealed class SettingsPage : PageBase
 
         _card.Title = "General Settings";
         _card.TitleIcon = Icons.Settings;
+        _card.Paint += OnCardPaint;
     }
 
     protected override void OnResize(EventArgs e)
@@ -500,30 +501,31 @@ public sealed class SettingsPage : PageBase
     private static int ParseInt(string text, int fallback)
         => int.TryParse(text, out var value) && value >= 0 ? value : fallback;
 
-    protected override void OnPaint(PaintEventArgs e)
+    /// <summary>
+    /// Field labels are drawn by the card itself. A page cannot paint into a
+    /// child control's rectangle: the child paints afterwards and covers it.
+    /// </summary>
+    private void OnCardPaint(object? sender, PaintEventArgs e)
     {
-        base.OnPaint(e);
-
         List<(string Label, Control Field)> rows;
-        if (!_rows.TryGetValue(_category, out rows) || !_card.Visible)
+        if (!_rows.TryGetValue(_category, out rows))
         {
             return;
         }
 
         var g = e.Graphics;
-        var origin = _card.Location;
         var content = _card.ContentBounds;
 
         foreach (var row in rows)
         {
             Theme.DrawText(g, row.Label, Theme.Small, Theme.TextSecondary,
-                new Rectangle(origin.X + content.X, origin.Y + row.Field.Top, 160, 32));
+                new Rectangle(content.X, row.Field.Top, 160, 32));
         }
 
         if (_category == "AI Models")
         {
             Theme.DrawText(g, "Face Match Threshold", Theme.Small, Theme.TextSecondary,
-                new Rectangle(origin.X + content.X, origin.Y + _faceThreshold.Top - 4, 160, 32));
+                new Rectangle(content.X, _faceThreshold.Top - 4, 160, 32));
         }
     }
 }

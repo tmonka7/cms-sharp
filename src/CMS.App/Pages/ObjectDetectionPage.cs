@@ -50,6 +50,7 @@ public sealed class ObjectDetectionPage : PageBase
 
         _settingsCard.Title = "Detection Settings";
         _settingsCard.TitleIcon = Icons.Settings;
+        _settingsCard.Paint += OnSettingsCardPaint;
 
         _countsCard.Title = "Detection Count";
         _countsCard.TitleIcon = Icons.Detection;
@@ -134,7 +135,10 @@ public sealed class ObjectDetectionPage : PageBase
         y += 34;
 
         _modelState.SetBounds(content.X, y, content.Width, 16);
-        y += 30;
+
+        // Leaves room for the "Detection Classes" heading, which the card paints
+        // 20px above the first checkbox.
+        y += 46;
 
         // Class checklist in two columns.
         var half = (content.Width - 8) / 2;
@@ -371,27 +375,27 @@ public sealed class ObjectDetectionPage : PageBase
         });
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    /// <summary>
+    /// Section labels are drawn by the card itself. A page cannot paint into a
+    /// child control's rectangle: the child paints afterwards and covers it.
+    /// </summary>
+    private void OnSettingsCardPaint(object? sender, PaintEventArgs e)
     {
-        base.OnPaint(e);
-
         var content = _settingsCard.ContentBounds;
-        if (content.Width <= 0 || !_settingsCard.Visible)
+        if (content.Width <= 0 || _classBoxes.Count == 0)
         {
             return;
         }
 
         var g = e.Graphics;
-        var origin = _settingsCard.Location;
 
         Theme.DrawText(g, "Enable Object Detection", Theme.Small, Theme.TextSecondary,
-            new Rectangle(origin.X + content.X, origin.Y + content.Y, content.Width - 50, 22));
+            new Rectangle(content.X, content.Y, content.Width - 50, 22));
 
-        var classesY = origin.Y + _classBoxes[0].Top - 20;
         Theme.DrawText(g, "Detection Classes", Theme.SmallBold, Theme.TextSecondary,
-            new Rectangle(origin.X + content.X, classesY, content.Width, 18));
+            new Rectangle(content.X, _classBoxes[0].Top - 20, content.Width, 18));
 
         Theme.DrawText(g, "Confidence Threshold", Theme.SmallBold, Theme.TextSecondary,
-            new Rectangle(origin.X + content.X, origin.Y + _confidence.Top - 20, content.Width - 56, 18));
+            new Rectangle(content.X, _confidence.Top - 20, content.Width - 56, 18));
     }
 }

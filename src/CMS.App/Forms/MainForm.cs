@@ -24,7 +24,10 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Camera Management System";
-        FormBorderStyle = FormBorderStyle.Sizable;
+
+        // The header draws its own caption bar and window buttons, so the OS
+        // chrome is removed; resizing is handled in WndProc below.
+        FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(1180, 720);
         Size = new Size(1440, 900);
@@ -321,6 +324,59 @@ public sealed class MainForm : Form
     private bool Confirm(string message)
         => MessageBox.Show(this, message, "Camera Management System",
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+
+    // ---- Borderless window resizing ----
+
+    private const int WmNcHitTest = 0x0084;
+    private const int ResizeBorder = 6;
+
+    private const int HtLeft = 10;
+    private const int HtRight = 11;
+    private const int HtTop = 12;
+    private const int HtTopLeft = 13;
+    private const int HtTopRight = 14;
+    private const int HtBottom = 15;
+    private const int HtBottomLeft = 16;
+    private const int HtBottomRight = 17;
+
+    /// <summary>
+    /// A borderless form has no resize frame, so the edges are reported back to
+    /// Windows here. The window manager then does the resize itself, which keeps
+    /// Aero Snap and multi-monitor behaviour working.
+    /// </summary>
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WmNcHitTest && WindowState == FormWindowState.Normal)
+        {
+            var lparam = unchecked((int)(long)m.LParam);
+            var screenPoint = new Point((short)(lparam & 0xFFFF), (short)((lparam >> 16) & 0xFFFF));
+            var point = PointToClient(screenPoint);
+
+            var onLeft = point.X <= ResizeBorder;
+            var onRight = point.X >= ClientSize.Width - ResizeBorder;
+            var onTop = point.Y <= ResizeBorder;
+            var onBottom = point.Y >= ClientSize.Height - ResizeBorder;
+
+            var hit = 0;
+
+            if (onTop && onLeft) hit = HtTopLeft;
+            else if (onTop && onRight) hit = HtTopRight;
+            else if (onBottom && onLeft) hit = HtBottomLeft;
+            else if (onBottom && onRight) hit = HtBottomRight;
+            else if (onLeft) hit = HtLeft;
+            else if (onRight) hit = HtRight;
+            else if (onTop) hit = HtTop;
+            else if (onBottom) hit = HtBottom;
+
+            if (hit != 0)
+            {
+                m.Result = (IntPtr)hit;
+                return;
+            }
+        }
+
+        base.WndProc(ref m);
+    }
 
     protected override void Dispose(bool disposing)
     {

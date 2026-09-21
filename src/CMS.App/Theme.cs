@@ -255,4 +255,45 @@ public static class Theme
         control.ForeColor = TextPrimary;
         control.Font = Body;
     }
+
+    /// <summary>
+    /// The colour actually painted behind a control.
+    ///
+    /// WinForms simulated transparency (Color.Transparent plus
+    /// SupportsTransparentBackColor) makes a child ask its PARENT to repaint
+    /// into the child's rectangle — which re-runs the parent's OnPaint, so any
+    /// text a page draws for its field labels is smeared into every such child.
+    /// Controls therefore paint an opaque background instead, resolved from
+    /// whatever surface they sit on.
+    /// </summary>
+    public static Color ResolveSurface(Control control)
+    {
+        var parent = control.Parent;
+
+        while (parent != null)
+        {
+            // A card paints a rounded fill over its own BackColor, so its
+            // children must match the fill, not the colour behind the corners.
+            if (parent is Controls.CardPanel card)
+            {
+                return card.Fill;
+            }
+
+            if (parent.BackColor != Color.Transparent)
+            {
+                return parent.BackColor;
+            }
+
+            parent = parent.Parent;
+        }
+
+        return Background;
+    }
+
+    /// <summary>Fills a control's whole client area with its resolved surface.</summary>
+    public static void PaintSurface(Graphics g, Control control)
+    {
+        using var brush = new SolidBrush(ResolveSurface(control));
+        g.FillRectangle(brush, control.ClientRectangle);
+    }
 }

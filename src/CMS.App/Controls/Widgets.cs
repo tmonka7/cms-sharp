@@ -53,6 +53,7 @@ public class MetricTile : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var bounds = new Rectangle(0, 0, Width, Height);
         Theme.DrawCard(g, bounds, Theme.Card, Theme.Border);
@@ -96,11 +97,9 @@ public class LinearMeter : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Font = Theme.Small;
         Height = 34;
     }
@@ -135,6 +134,7 @@ public class LinearMeter : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var color = BarColor;
         if (ColorByLoad)
@@ -177,11 +177,9 @@ public class RingGauge : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Size = new Size(96, 96);
     }
 
@@ -211,6 +209,7 @@ public class RingGauge : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var size = Math.Min(Width, Height - (string.IsNullOrEmpty(Caption) ? 0 : 18));
         var inset = Thickness / 2;
@@ -255,11 +254,9 @@ public class DarkCheckBox : CheckBox
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         ForeColor = Theme.TextSecondary;
         Font = Theme.Body;
         Cursor = Cursors.Hand;
@@ -270,6 +267,7 @@ public class DarkCheckBox : CheckBox
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var box = new Rectangle(0, (Height - 16) / 2, 16, 16);
 
@@ -306,11 +304,9 @@ public class DarkSlider : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Height = 22;
         Cursor = Cursors.Hand;
     }
@@ -379,6 +375,7 @@ public class DarkSlider : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var track = new Rectangle(7, (Height - 4) / 2, Math.Max(1, Width - 14), 4);
         Theme.FillRounded(g, track, 2, Theme.Input);
@@ -419,11 +416,9 @@ public class DarkLabel : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         ForeColor = Theme.TextSecondary;
         Font = Theme.Body;
         Height = 20;
@@ -443,6 +438,8 @@ public class DarkLabel : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        Theme.PaintSurface(e.Graphics, this);
+
         var flags = Alignment switch
         {
             ContentAlignment.MiddleCenter => TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
@@ -465,11 +462,9 @@ public class StatusPill : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Font = Theme.Small;
         Size = new Size(80, 22);
     }
@@ -482,6 +477,7 @@ public class StatusPill : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
         Theme.FillRounded(g, bounds, Height / 2, Color.FromArgb(38, PillColor));

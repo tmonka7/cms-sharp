@@ -32,9 +32,9 @@ public class AppHeader : Control
         BackColor = Theme.Shell;
         ForeColor = Theme.TextPrimary;
         Font = Theme.Body;
-        Height = Theme.HeaderHeight;
-        Dock = DockStyle.Top;
 
+        // Every child must exist before anything resizes this control: setting
+        // Height raises OnSizeChanged, which lays them out.
         _minimize = CaptionButton(Icons.Minimize);
         _maximize = CaptionButton(Icons.Maximize);
         _close = CaptionButton(Icons.Close);
@@ -66,6 +66,9 @@ public class AppHeader : Control
         _user.Click += (s, e) => UserClicked?.Invoke(this, EventArgs.Empty);
 
         Controls.AddRange(new Control[] { _minimize, _maximize, _close, _bell, _user });
+
+        Height = Theme.HeaderHeight;
+        Dock = DockStyle.Top;
 
         _clock = new System.Windows.Forms.Timer { Interval = 1000 };
         _clock.Tick += (s, e) => Invalidate(new Rectangle(Width - 420, 0, 260, Height));

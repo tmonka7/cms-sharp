@@ -32,9 +32,9 @@ public class TitleBar : Control
         BackColor = Theme.Shell;
         ForeColor = Theme.TextPrimary;
         Font = Theme.Body;
-        Height = Theme.TitleBarHeight;
-        Dock = DockStyle.Top;
 
+        // The caption buttons must exist before anything resizes this control:
+        // setting Height raises OnSizeChanged, which lays them out.
         _minimize = MakeCaptionButton(Icons.Minimize);
         _maximize = MakeCaptionButton(Icons.Maximize);
         _close = MakeCaptionButton(Icons.Close);
@@ -47,6 +47,9 @@ public class TitleBar : Control
         Controls.Add(_minimize);
         Controls.Add(_maximize);
         Controls.Add(_close);
+
+        Height = Theme.TitleBarHeight;
+        Dock = DockStyle.Top;
     }
 
     /// <summary>Product name drawn in bold before the accented word.</summary>

@@ -48,6 +48,7 @@ public sealed class UserManagementPage : PageBase
 
         _permissionsCard.Title = "Permissions";
         _permissionsCard.TitleIcon = Icons.Lock;
+        _permissionsCard.Paint += OnPermissionsCardPaint;
         _permissionsCard.Controls.Add(_selectedUser);
         _permissionsCard.Controls.Add(_hint);
         _permissionsCard.Controls.Add(_save);
@@ -159,7 +160,10 @@ public sealed class UserManagementPage : PageBase
         var y = content.Y;
 
         _selectedUser.SetBounds(content.X, y, content.Width, 22);
-        y += 28;
+
+        // Leaves room for the "Allowed screens" caption, which the card paints
+        // 18px above the first checkbox.
+        y += 46;
 
         foreach (var box in _permissionBoxes)
         {
@@ -298,19 +302,20 @@ public sealed class UserManagementPage : PageBase
         Reload();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    /// <summary>
+    /// Drawn by the card itself. A page cannot paint into a child control's
+    /// rectangle: the child paints afterwards and covers it.
+    /// </summary>
+    private void OnPermissionsCardPaint(object? sender, PaintEventArgs e)
     {
-        base.OnPaint(e);
-
-        if (!_permissionsCard.Visible || _permissionBoxes.Count == 0)
+        if (_permissionBoxes.Count == 0)
         {
             return;
         }
 
-        var origin = _permissionsCard.Location;
         var content = _permissionsCard.ContentBounds;
 
         Theme.DrawText(e.Graphics, "Allowed screens", Theme.Caption, Theme.TextMuted,
-            new Rectangle(origin.X + content.X, origin.Y + _permissionBoxes[0].Top - 18, content.Width, 16));
+            new Rectangle(content.X, _permissionBoxes[0].Top - 18, content.Width, 16));
     }
 }

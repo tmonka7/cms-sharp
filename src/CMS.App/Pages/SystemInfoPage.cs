@@ -56,6 +56,11 @@ public sealed class SystemInfoPage : PageBase
         _modelsCard.Title = "AI Models";
         _modelsCard.TitleIcon = Icons.Detection;
 
+        _versionCard.Paint += OnVersionCardPaint;
+        _networkCard.Paint += OnNetworkCardPaint;
+        _modelsCard.Paint += OnModelsCardPaint;
+        _resourcesCard.Paint += OnResourcesCardPaint;
+
         _checkUpdate.Click += (s, e) => MessageBox.Show(
             this,
             "This installation is designed to run offline and does not contact an update server.\n\n" +
@@ -170,10 +175,12 @@ public sealed class SystemInfoPage : PageBase
         }
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    /// <summary>
+    /// Each card paints its own key/value rows. A page cannot paint into a
+    /// child control's rectangle: the child paints afterwards and covers it.
+    /// </summary>
+    private void OnVersionCardPaint(object? sender, PaintEventArgs e)
     {
-        base.OnPaint(e);
-
         var g = e.Graphics;
 
         DrawRows(g, _versionCard, new[]
@@ -186,8 +193,11 @@ public sealed class SystemInfoPage : PageBase
             ("Database", Services.Database.DatabasePath),
             ("Uptime", _snapshot.UptimeText)
         });
+    }
 
-        DrawRows(g, _networkCard, new[]
+    private void OnNetworkCardPaint(object? sender, PaintEventArgs e)
+    {
+        DrawRows(e.Graphics, _networkCard, new[]
         {
             ("Adapter", _network.Adapter),
             ("IP Address", _network.IpAddress),
@@ -196,11 +206,14 @@ public sealed class SystemInfoPage : PageBase
             ("DNS", _network.Dns),
             ("Throughput", _snapshot.NetworkMbps.ToString("0.0") + " Mbps")
         });
+    }
 
+    private void OnModelsCardPaint(object? sender, PaintEventArgs e)
+    {
         var detector = Services.Analytics.Detector;
         var faces = Services.FaceRecognition;
 
-        DrawRows(g, _modelsCard, new[]
+        DrawRows(e.Graphics, _modelsCard, new[]
         {
             ("Object Model", Services.Settings.ObjectModelName),
             ("Object Model File", detector.IsReady ? detector.ModelPath : "not loaded"),
@@ -210,56 +223,40 @@ public sealed class SystemInfoPage : PageBase
             ("Enrolled Identities", faces.GalleryCount.ToString()),
             ("Acceleration", Services.Settings.UseGpu ? "GPU requested" : "CPU")
         });
-
-        DrawResourceDetail(g);
     }
 
-    /// <summary>Draws a key/value list inside a card.</summary>
+    /// <summary>Draws a key/value list inside a card, in card-local coordinates.</summary>
     private static void DrawRows(Graphics g, CardPanel card, (string Label, string Value)[] rows)
     {
-        if (!card.Visible)
-        {
-            return;
-        }
-
         var content = card.ContentBounds;
-        var origin = card.Location;
-
         if (content.Width <= 0)
         {
             return;
         }
 
         var labelWidth = Math.Min(150, content.Width / 2);
-        var y = origin.Y + content.Y;
+        var y = content.Y;
 
         foreach (var row in rows)
         {
             Theme.DrawText(g, row.Label, Theme.Small, Theme.TextSecondary,
-                new Rectangle(origin.X + content.X, y, labelWidth, 22));
+                new Rectangle(content.X, y, labelWidth, 22));
 
             Theme.DrawText(g, string.IsNullOrEmpty(row.Value) ? "-" : row.Value, Theme.Small, Theme.TextPrimary,
-                new Rectangle(origin.X + content.X + labelWidth, y, content.Width - labelWidth, 22),
+                new Rectangle(content.X + labelWidth, y, content.Width - labelWidth, 22),
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.PathEllipsis);
 
             y += 24;
         }
     }
 
-    private void DrawResourceDetail(Graphics g)
+    private void OnResourcesCardPaint(object? sender, PaintEventArgs e)
     {
-        if (!_resourcesCard.Visible)
-        {
-            return;
-        }
-
         var content = _resourcesCard.ContentBounds;
-        var origin = _resourcesCard.Location;
-
         var text = "Memory " + _snapshot.MemoryText + "      Disk " + _snapshot.StorageText;
 
-        Theme.DrawText(g, text, Theme.Caption, Theme.TextMuted,
-            new Rectangle(origin.X + content.X, origin.Y + content.Bottom - 18, content.Width, 16),
+        Theme.DrawText(e.Graphics, text, Theme.Caption, Theme.TextMuted,
+            new Rectangle(content.X, content.Bottom - 18, content.Width, 16),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 }

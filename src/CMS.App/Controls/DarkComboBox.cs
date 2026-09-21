@@ -75,6 +75,7 @@ public class DarkComboBox : ComboBox
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var bounds = new Rectangle(0, 0, Width, Height);
         var border = DroppedDown ? Theme.Accent : _hovered ? Theme.BorderStrong : Theme.Border;

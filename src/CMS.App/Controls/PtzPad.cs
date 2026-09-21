@@ -20,11 +20,9 @@ public class PtzPad : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Size = new Size(128, 128);
         Cursor = Cursors.Hand;
     }
@@ -171,6 +169,7 @@ public class PtzPad : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var size = Radius * 2;
         var outer = new Rectangle(Center.X - Radius, Center.Y - Radius, size, size);

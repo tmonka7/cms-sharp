@@ -26,11 +26,8 @@ public class DarkTextBox : Control
             ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Theme.Input;
-        ForeColor = Theme.TextPrimary;
-        Font = Theme.Body;
-        Size = new Size(200, 32);
-
+        // The hosted edit control must exist first: setting Font or Size on this
+        // control raises OnFontChanged / OnSizeChanged, both of which lay it out.
         _input = new TextBox
         {
             BorderStyle = BorderStyle.None,
@@ -38,6 +35,11 @@ public class DarkTextBox : Control
             ForeColor = Theme.TextPrimary,
             Font = Theme.Body
         };
+
+        BackColor = Theme.Input;
+        ForeColor = Theme.TextPrimary;
+        Font = Theme.Body;
+        Size = new Size(200, 32);
 
         _input.GotFocus += (s, e) => { _focused = true; Invalidate(); };
         _input.LostFocus += (s, e) => { _focused = false; Invalidate(); };
@@ -180,6 +182,7 @@ public class DarkTextBox : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var bounds = new Rectangle(0, 0, Width, Height);
         var border = !Enabled

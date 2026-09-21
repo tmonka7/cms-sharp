@@ -18,11 +18,9 @@ public class ToggleSwitch : Control
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Size = new Size(42, 22);
         Cursor = Cursors.Hand;
     }
@@ -77,6 +75,7 @@ public class ToggleSwitch : Control
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var height = Math.Min(Height, 22);
         var top = (Height - height) / 2;

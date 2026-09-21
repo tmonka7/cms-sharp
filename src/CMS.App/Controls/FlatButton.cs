@@ -42,11 +42,9 @@ public class FlatButton : Control, IButtonControl
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.UserPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         ForeColor = Theme.TextPrimary;
         Font = Theme.Body;
         Cursor = Cursors.Hand;
@@ -195,6 +193,7 @@ public class FlatButton : Control, IButtonControl
     {
         var g = e.Graphics;
         Theme.Smooth(g);
+        Theme.PaintSurface(g, this);
 
         var accent = AccentOverride ?? Theme.Accent;
         var bounds = new Rectangle(0, 0, Width, Height);
