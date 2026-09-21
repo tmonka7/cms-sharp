@@ -492,8 +492,12 @@ public sealed class SettingsPage : PageBase
 
         var message =
             "Object detection: " + (detector.IsReady ? "loaded" : "not loaded - " + detector.LastError) +
-            "\nFace detection: " + (faces.DetectorReady ? "loaded" : "not loaded") +
-            "\nFace recognition: " + (faces.EmbedderReady ? "loaded" : "not loaded");
+            "\nFace detection: " + (faces.DetectorReady
+                ? "loaded (" + faces.DetectorLayout + " head)"
+                : "not loaded - " + faces.DetectorError) +
+            "\nFace recognition: " + (faces.EmbedderReady
+                ? "loaded (" + faces.EmbedderSignature + ")"
+                : "not loaded - " + faces.EmbedderError);
 
         MessageBox.Show(this, message, "AI Models", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }

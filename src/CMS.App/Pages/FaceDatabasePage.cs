@@ -146,7 +146,8 @@ public sealed class FaceDatabasePage : PageBase
             ShowError(
                 "The face models are not loaded, so a photo cannot be enrolled.\n\n" +
                 "Place the detector and recognition ONNX files in the Models folder, " +
-                "then restart the application.");
+                "then restart the application.\n\n" +
+                (Services.FaceRecognition.LastError ?? string.Empty));
             return;
         }
 

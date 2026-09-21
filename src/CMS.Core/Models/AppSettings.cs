@@ -62,7 +62,13 @@ public sealed class AppSettings
 
     public string FaceEmbedderPath { get; set; } = @"Models\face_recognition.onnx";
 
-    public float FaceMatchThreshold { get; set; } = 0.60f;
+    /// <summary>
+    /// On the 0..1 scale the UI shows, which is cosine similarity remapped as
+    /// (cosine + 1) / 2. This default is the 0.363 cosine that OpenCV publishes
+    /// for SFace; 0.60 here would be a cosine of 0.20, low enough to match
+    /// strangers.
+    /// </summary>
+    public float FaceMatchThreshold { get; set; } = 0.68f;
 
     public bool FaceRecognitionEnabled { get; set; } = true;
 

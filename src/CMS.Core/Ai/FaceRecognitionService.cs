@@ -32,12 +32,26 @@ public sealed class FaceRecognitionService : IDisposable
 
     public string? LastError => _detector.LastError ?? _embedder.LastError;
 
+    public string? DetectorError => _detector.LastError;
+
+    public string? EmbedderError => _embedder.LastError;
+
+    /// <summary>Which head layout the detector recognised, e.g. "YuNet".</summary>
+    public string DetectorLayout => _detector.LayoutName;
+
+    /// <summary>Embedding width and the pixel convention chosen for the model.</summary>
+    public string EmbedderSignature
+        => _embedder.EmbeddingSize + " floats, " + _embedder.InputConvention;
+
     public string DetectorModelPath => _detector.ModelPath;
 
     public string EmbedderModelPath => _embedder.ModelPath;
 
-    /// <summary>Similarity a candidate must reach to count as a match.</summary>
-    public float MatchThreshold { get; set; } = 0.60f;
+    /// <summary>
+    /// Similarity a candidate must reach to count as a match, on the remapped
+    /// 0..1 scale. See <see cref="Models.AppSettings.FaceMatchThreshold"/>.
+    /// </summary>
+    public float MatchThreshold { get; set; } = 0.68f;
 
     public float DetectionThreshold
     {

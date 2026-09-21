@@ -219,7 +219,9 @@ public sealed class SystemInfoPage : PageBase
             ("Object Model File", detector.IsReady ? detector.ModelPath : "not loaded"),
             ("Input Size", detector.IsReady ? detector.InputWidth + " x " + detector.InputHeight : "-"),
             ("Face Detector", faces.DetectorReady ? faces.DetectorModelPath : "not loaded"),
+            ("Detector Head", faces.DetectorReady ? faces.DetectorLayout : faces.DetectorError ?? "-"),
             ("Face Recognition", faces.EmbedderReady ? faces.EmbedderModelPath : "not loaded"),
+            ("Embedding", faces.EmbedderReady ? faces.EmbedderSignature : faces.EmbedderError ?? "-"),
             ("Enrolled Identities", faces.GalleryCount.ToString()),
             ("Acceleration", Services.Settings.UseGpu ? "GPU requested" : "CPU")
         });

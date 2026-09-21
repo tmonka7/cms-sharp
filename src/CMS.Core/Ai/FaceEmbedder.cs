@@ -26,11 +26,16 @@ public sealed class FaceEmbedder : IDisposable
 
     public int EmbeddingSize { get; private set; } = 512;
 
+    public int InputWidth => _inputWidth;
+
+    public int InputHeight => _inputHeight;
+
     /// <summary>
-    /// ArcFace exports expect (pixel - 127.5) / 128. Models trained with a plain
-    /// 0..1 scale can switch this off.
+    /// How the crop is turned into the input tensor. Getting this wrong does not
+    /// fail: the model still returns a vector, but every face lands in roughly
+    /// the same direction and unrelated crops score as matches.
     /// </summary>
-    public bool UseSignedNormalisation { get; set; } = true;
+    public FaceEmbeddingInput InputConvention { get; set; } = FaceEmbeddingInput.ArcFace;
 
     public bool Load(string modelPath, bool useGpu = false)
     {
@@ -76,6 +81,14 @@ public sealed class FaceEmbedder : IDisposable
                     }
                 }
 
+                // SFace, the 128-float model from opencv_zoo, is trained on the
+                // OpenCV blob defaults; the 512-float ArcFace exports are not.
+                // The width of the embedding is the only reliable signal the
+                // file itself gives, so it picks the default.
+                InputConvention = EmbeddingSize == 128
+                    ? FaceEmbeddingInput.OpenCvRaw
+                    : FaceEmbeddingInput.ArcFace;
+
                 LastError = null;
                 return true;
             }
@@ -106,8 +119,18 @@ public sealed class FaceEmbedder : IDisposable
             using var resized = new Mat();
             Cv2.Resize(faceCrop, resized, new OpenCvSharp.Size(_inputWidth, _inputHeight));
 
-            using var rgb = new Mat();
-            Cv2.CvtColor(resized, rgb, ColorConversionCodes.BGR2RGB);
+            using var prepared = new Mat();
+
+            // OpenCV's own models are fed the frame as it comes off the decoder,
+            // in BGR; the ArcFace exports come from pipelines that swap first.
+            if (InputConvention == FaceEmbeddingInput.OpenCvRaw)
+            {
+                resized.CopyTo(prepared);
+            }
+            else
+            {
+                Cv2.CvtColor(resized, prepared, ColorConversionCodes.BGR2RGB);
+            }
 
             var tensor = new DenseTensor<float>(new[] { 1, 3, _inputHeight, _inputWidth });
             var buffer = tensor.Buffer.Span;
@@ -115,7 +138,7 @@ public sealed class FaceEmbedder : IDisposable
 
             // A three-channel Mat must be read as Vec3b. The byte[] overload rejects
             // any CV_8UC3 image whose pixel count is not a multiple of three.
-            rgb.GetArray(out Vec3b[] pixels);
+            prepared.GetArray(out Vec3b[] pixels);
 
             for (var i = 0; i < planeSize; i++)
             {
@@ -132,8 +155,12 @@ public sealed class FaceEmbedder : IDisposable
         }
     }
 
-    private float Scale(byte value)
-        => UseSignedNormalisation ? (value - 127.5f) / 128f : value / 255f;
+    private float Scale(byte value) => InputConvention switch
+    {
+        FaceEmbeddingInput.OpenCvRaw => value,
+        FaceEmbeddingInput.UnitScaled => value / 255f,
+        _ => (value - 127.5f) / 128f
+    };
 
     /// <summary>Scales a vector to unit length so cosine similarity is a dot product.</summary>
     public static float[] Normalise(float[] vector)
@@ -199,4 +226,20 @@ public sealed class FaceEmbedder : IDisposable
             Unload();
         }
     }
+}
+
+/// <summary>
+/// The pixel convention a recognition model was trained with. The wrong choice
+/// is silent: the embeddings stay unit length and every comparison scores high.
+/// </summary>
+public enum FaceEmbeddingInput
+{
+    /// <summary>RGB, (pixel - 127.5) / 128. InsightFace and ArcFace exports.</summary>
+    ArcFace,
+
+    /// <summary>RGB, pixel / 255.</summary>
+    UnitScaled,
+
+    /// <summary>BGR, raw 0..255. The OpenCV blob defaults that SFace expects.</summary>
+    OpenCvRaw
 }
