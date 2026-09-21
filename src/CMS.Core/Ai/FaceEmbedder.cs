@@ -113,14 +113,16 @@ public sealed class FaceEmbedder : IDisposable
             var buffer = tensor.Buffer.Span;
             var planeSize = _inputWidth * _inputHeight;
 
-            rgb.GetArray(out byte[] pixels);
+            // A three-channel Mat must be read as Vec3b. The byte[] overload rejects
+            // any CV_8UC3 image whose pixel count is not a multiple of three.
+            rgb.GetArray(out Vec3b[] pixels);
 
             for (var i = 0; i < planeSize; i++)
             {
-                var offset = i * 3;
-                buffer[i] = Scale(pixels[offset]);
-                buffer[planeSize + i] = Scale(pixels[offset + 1]);
-                buffer[(planeSize * 2) + i] = Scale(pixels[offset + 2]);
+                var pixel = pixels[i];
+                buffer[i] = Scale(pixel.Item0);
+                buffer[planeSize + i] = Scale(pixel.Item1);
+                buffer[(planeSize * 2) + i] = Scale(pixel.Item2);
             }
 
             var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_inputName, tensor) };

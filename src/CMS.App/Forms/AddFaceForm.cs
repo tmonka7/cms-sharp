@@ -129,8 +129,12 @@ public sealed class AddFaceForm : Form
         {
             try
             {
+                // The bitmap has to own its bytes: GDI+ keeps reading the stream
+                // for the lifetime of an Image created from one, so the copy is
+                // what makes closing the stream here safe.
                 using var stream = new MemoryStream(_existing.Thumbnail);
-                _photo.Image = Image.FromStream(stream);
+                using var stored = Image.FromStream(stream);
+                _photo.Image = new Bitmap(stored);
             }
             catch (ArgumentException)
             {
@@ -306,7 +310,20 @@ public sealed class AddFaceForm : Form
             return;
         }
 
-        var record = faces.Enroll(_sourceImage, _name.Text.Trim(), group, _note.Text.Trim());
+        FaceRecord? record;
+
+        try
+        {
+            record = faces.Enroll(_sourceImage, _name.Text.Trim(), group, _note.Text.Trim());
+        }
+        catch (Exception ex)
+        {
+            // A bad model file or an unexpected tensor layout should fail this
+            // one enrolment, not take the whole station down.
+            SetStatus("Enrolment failed: " + ex.Message, Theme.Offline);
+            Program.Services.LogEvent(EventKind.System, "Face enrolment failed: " + ex, EventSeverity.Warning);
+            return;
+        }
 
         if (record == null)
         {

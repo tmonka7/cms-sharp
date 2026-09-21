@@ -163,14 +163,17 @@ public sealed class FaceDetector : IDisposable
         var buffer = tensor.Buffer.Span;
         var planeSize = _inputWidth * _inputHeight;
 
-        rgb.GetArray(out byte[] pixels);
+        // A three-channel Mat must be read as Vec3b. The byte[] overload rejects
+        // any CV_8UC3 image whose pixel count is not a multiple of three, which is
+        // almost every frame size.
+        rgb.GetArray(out Vec3b[] pixels);
 
         for (var i = 0; i < planeSize; i++)
         {
-            var offset = i * 3;
-            buffer[i] = pixels[offset] / 255f;
-            buffer[planeSize + i] = pixels[offset + 1] / 255f;
-            buffer[(planeSize * 2) + i] = pixels[offset + 2] / 255f;
+            var pixel = pixels[i];
+            buffer[i] = pixel.Item0 / 255f;
+            buffer[planeSize + i] = pixel.Item1 / 255f;
+            buffer[(planeSize * 2) + i] = pixel.Item2 / 255f;
         }
 
         return tensor;
