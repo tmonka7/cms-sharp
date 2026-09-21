@@ -72,6 +72,13 @@ public sealed class FaceDetector : IDisposable
     /// <summary>The head the loaded model was recognised as, for the info screen.</summary>
     public string LayoutName => _layout.ToString();
 
+    /// <summary>
+    /// How the last inference actually read the output tensor. A YOLO head is
+    /// resolved from the live tensor, so this is the only place the real shape
+    /// shows up when the export declared dynamic axes.
+    /// </summary>
+    public string OutputSignature { get; private set; } = "not run yet";
+
     public int InputWidth => _inputWidth;
 
     public int InputHeight => _inputHeight;
@@ -173,20 +180,28 @@ public sealed class FaceDetector : IDisposable
             return;
         }
 
-        if (outputDimensions.Length == 3 && outputDimensions[1] > 0 && outputDimensions[2] > 0)
+        // A three-axis output is a YOLO head. Which axis is which is decided per
+        // inference rather than here, because an export made with dynamic axes
+        // reports -1 for the very dimensions that would answer it.
+        if (outputDimensions.Length == 3)
         {
-            _transposedOutput = outputDimensions[1] < outputDimensions[2];
-
-            var channels = _transposedOutput ? outputDimensions[1] : outputDimensions[2];
-            if (channels >= 5)
-            {
-                _layout = HeadLayout.Yolo;
-                return;
-            }
+            _layout = HeadLayout.Yolo;
+            return;
         }
 
         _layout = HeadLayout.Unsupported;
     }
+
+    /// <summary>
+    /// How many boxes an anchor-free head emits for the current input size: one
+    /// per cell of the stride 8, 16 and 32 feature maps. An anchored YOLOv5 head
+    /// emits three times as many, and that ratio is what distinguishes them when
+    /// the tensor is otherwise the same shape.
+    /// </summary>
+    private int AnchorFreeBoxCount()
+        => ((_inputWidth / 8) * (_inputHeight / 8)) +
+           ((_inputWidth / 16) * (_inputHeight / 16)) +
+           ((_inputWidth / 32) * (_inputHeight / 32));
 
     private string DescribeUnsupportedHead()
     {
@@ -234,6 +249,7 @@ public sealed class FaceDetector : IDisposable
 
             if (_layout == HeadLayout.YuNet)
             {
+                OutputSignature = "12 stride heads, landmarks";
                 faces = ParseYunet(results, scale, padX, padY, frame.Width, frame.Height);
             }
             else
@@ -406,21 +422,67 @@ public sealed class FaceDetector : IDisposable
 
         if (dimensions.Length != 3)
         {
+            OutputSignature = "unreadable: " + dimensions.Length + " axes";
             return faces;
         }
 
-        var boxes = _transposedOutput ? dimensions[2] : dimensions[1];
+        // The channel axis is the short one. Reading this from the live tensor
+        // rather than the loaded metadata is what makes an export with dynamic
+        // axes work: those report -1 where the orientation would be decided.
+        _transposedOutput = dimensions[1] < dimensions[2];
+
         var channels = _transposedOutput ? dimensions[1] : dimensions[2];
+        var boxes = _transposedOutput ? dimensions[2] : dimensions[1];
 
         if (channels < 5)
         {
+            OutputSignature = "unreadable: only " + channels + " channels";
             return faces;
         }
 
-        // An anchor-free head ([1, 4+classes, N]) puts the class score straight in
-        // slot 4; the older anchored head ([1, N, 5+classes]) puts objectness there
-        // and the class score in slot 5. Only the latter is a product.
-        var hasObjectness = !_transposedOutput && channels >= 6;
+        // The row count says which of the three forms this is.
+        //
+        //  * An export with NMS inside the graph emits a fixed max_det rows
+        //    (100, 300) of an already-decoded corner box - far fewer than any
+        //    anchor grid.
+        //  * An anchored YOLOv5 head emits three boxes per grid cell and carries
+        //    a separate objectness score.
+        //  * An anchor-free YOLOv8 or v11 head emits one per cell, and its slot
+        //    4 is already the class score.
+        var anchorFree = AnchorFreeBoxCount();
+        var isDecoded = boxes < anchorFree / 4;
+        var hasObjectness = !isDecoded && boxes >= anchorFree * 2;
+
+        // The channel count has to match exactly. A COCO model's 84 channels are
+        // 80 class scores, not keypoints, and must not be read as any.
+        var landmarkStart = -1;
+        var landmarkStride = 0;
+
+        if (isDecoded && channels == 21)
+        {
+            // x1, y1, x2, y2, score, class, then 5 (x, y, visibility) triplets.
+            landmarkStart = 6;
+            landmarkStride = 3;
+        }
+        else if (hasObjectness && channels == 16)
+        {
+            // yolov5-face: box, objectness, 5 x/y pairs, class.
+            landmarkStart = 5;
+            landmarkStride = 2;
+        }
+        else if (!isDecoded && !hasObjectness && channels == 20)
+        {
+            // yolov8-face: box, class, 5 (x, y, visibility) triplets.
+            landmarkStart = 5;
+            landmarkStride = 3;
+        }
+
+        OutputSignature = string.Format(
+            "[{0},{1},{2}] {3}, {4} rows x {5} channels{6}",
+            dimensions[0], dimensions[1], dimensions[2],
+            isDecoded ? "NMS inside" : hasObjectness ? "anchored" : "anchor-free",
+            boxes, channels,
+            landmarkStart >= 0 ? ", landmarks" : string.Empty);
 
         for (var i = 0; i < boxes; i++)
         {
@@ -428,7 +490,9 @@ public sealed class FaceDetector : IDisposable
 
             if (hasObjectness)
             {
-                var classScore = Read(output, i, 5);
+                // A face model has one class and puts its score last, after any
+                // landmarks. Slot 5 is a landmark coordinate, not a score.
+                var classScore = Read(output, i, channels - 1);
                 if (classScore > 0f && classScore <= 1f)
                 {
                     confidence *= classScore;
@@ -440,20 +504,48 @@ public sealed class FaceDetector : IDisposable
                 continue;
             }
 
-            var boxWidth = Read(output, i, 2);
-            var boxHeight = Read(output, i, 3);
+            float left, top, boxWidth, boxHeight;
+
+            if (isDecoded)
+            {
+                // Already corners, because the graph's NMS produced them.
+                left = Read(output, i, 0);
+                top = Read(output, i, 1);
+                boxWidth = Read(output, i, 2) - left;
+                boxHeight = Read(output, i, 3) - top;
+            }
+            else
+            {
+                boxWidth = Read(output, i, 2);
+                boxHeight = Read(output, i, 3);
+                left = Read(output, i, 0) - (boxWidth / 2f);
+                top = Read(output, i, 1) - (boxHeight / 2f);
+            }
 
             var box = ToFrameBox(
-                Read(output, i, 0) - (boxWidth / 2f),
-                Read(output, i, 1) - (boxHeight / 2f),
-                boxWidth,
-                boxHeight,
+                left, top, boxWidth, boxHeight,
                 scale, padX, padY, width, height, confidence, MinimumFaceSize);
 
-            if (box.HasValue)
+            if (!box.HasValue)
             {
-                faces.Add(new FaceBox(box.Value, Array.Empty<Point2f>()));
+                continue;
             }
+
+            var landmarks = Array.Empty<Point2f>();
+
+            if (landmarkStart >= 0 && landmarkStart + (landmarkStride * 5) <= channels)
+            {
+                landmarks = new Point2f[5];
+                for (var point = 0; point < 5; point++)
+                {
+                    var slot = landmarkStart + (point * landmarkStride);
+                    landmarks[point] = new Point2f(
+                        (Read(output, i, slot) - padX) / scale,
+                        (Read(output, i, slot + 1) - padY) / scale);
+                }
+            }
+
+            faces.Add(new FaceBox(box.Value, landmarks));
         }
 
         return faces;

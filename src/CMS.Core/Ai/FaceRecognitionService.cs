@@ -39,6 +39,9 @@ public sealed class FaceRecognitionService : IDisposable
     /// <summary>Which head layout the detector recognised, e.g. "YuNet".</summary>
     public string DetectorLayout => _detector.LayoutName;
 
+    /// <summary>How the detector read its output tensor on the last inference.</summary>
+    public string DetectorOutput => _detector.OutputSignature;
+
     /// <summary>Embedding width and the pixel convention chosen for the model.</summary>
     public string EmbedderSignature
         => _embedder.EmbeddingSize + " floats, " + _embedder.InputConvention;

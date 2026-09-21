@@ -45,8 +45,57 @@ message naming its outputs, rather than loading and then finding nobody.
 | Layout | Recognised by | Notes |
 |---|---|---|
 | YuNet | twelve outputs, `cls_`/`obj_`/`bbox_`/`kps_` per stride 8/16/32 | Decoded per stride. Supplies the five landmarks. |
-| YOLO-face | one output, `[1, 4+, N]` or `[1, N, 5+]` | No landmarks. |
+| YOLO-face | one output with three axes | Orientation, objectness and landmarks are resolved from the live tensor, not the metadata. |
 | Row list | one output, `[N, 15]` | Already-decoded box, landmarks and score. |
+
+### How a YOLO head is read
+
+The channel axis is whichever of the two is shorter, taken from the tensor the
+model actually returned. This matters: an export made with `dynamic=True`
+declares `-1` for the box axis, so nothing about the orientation can be settled
+at load time. Deciding it from the metadata instead reads the tensor transposed
+and finds nothing at all, with no error.
+
+The row count then says which of three forms it is:
+
+| Rows | Form | Slot 4 | Box |
+|---|---|---|---|
+| a fixed `max_det` (100, 300) | NMS inside the graph | score | corners `x1,y1,x2,y2` |
+| one per stride 8/16/32 cell (8400 at 640) | anchor-free, YOLOv8/v11 | class score | centre `cx,cy,w,h` |
+| three per cell (25200 at 640) | anchored, YOLOv5 | objectness | centre `cx,cy,w,h` |
+
+Only the anchored form multiplies in a class score, and it reads it from the
+**last** channel. Slot 5 there is a landmark coordinate, not a score — assuming
+otherwise scales every detection by a keypoint's x value.
+
+Landmarks are read only when the channel count matches exactly:
+
+| Channels | Form | Layout |
+|---|---|---|
+| 5 | anchor-free | box, class |
+| 16 | anchored | box, objectness, 5 landmark x/y pairs, class |
+| 20 | anchor-free | box, class, 5 landmark (x, y, visibility) triplets |
+| 21 | NMS inside | corners, score, class, 5 (x, y, visibility) triplets |
+
+Any other count is treated as boxes and scores only. An 84-channel COCO model,
+for instance, carries 80 class scores where a face model carries keypoints, and
+reading those as landmarks would be nonsense.
+
+### yolo-face exports this was checked against
+
+Every one of these enrols and matches correctly, paired with SFace:
+
+| File | Output | Form |
+|---|---|---|
+| `akanametov/yolo-face` `yolov8n-face.onnx` | `[1,300,21]` | NMS inside, landmarks |
+| `huygiatrng/yolov11n-face-pose-5kp` | `[1,20,8400]` | anchor-free, landmarks |
+| `clibdev/yolov5-face` `yolov5n-face.onnx` | `[1,25200,16]` | anchored, landmarks |
+| `deepghs/yolo-face` `yolov8n-face` | `[-1,5,-1]` | anchor-free, dynamic axes |
+
+Note that `yolov5-face` names its input tensor `input`, not `images`; the name is
+read from the model, so either works. The `derronqi/yolov8-face` weights are
+**not** usable: they are exported without the decode head, as three raw feature
+maps needing DFL decoding.
 
 ## Pixel conventions
 
@@ -88,6 +137,7 @@ which file is loaded:
 ## Verifying a model loaded
 
 **System Information → AI Models** lists the resolved path, the detected head
-layout, the embedding width and the chosen pixel convention.
+layout, how the output tensor was read on the last inference, the embedding
+width and the chosen pixel convention.
 **Settings → AI Models → Reload Models** reports the same without restarting,
 including the reason when a model was refused.

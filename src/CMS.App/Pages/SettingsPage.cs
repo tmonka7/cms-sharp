@@ -135,7 +135,7 @@ public sealed class SettingsPage : PageBase
 
     private void ConfigureFields()
     {
-        _language.Items.AddRange(new object[] { "English", "한국어", "日本語", "中文" });
+        _language.Items.AddRange(new object[] { "English", "日本語", "中文" });
         _dateFormat.Items.AddRange(new object[] { "yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy" });
         _autoLogout.Items.AddRange(new object[] { "Never", "15 minutes", "30 minutes", "60 minutes" });
 
@@ -314,7 +314,7 @@ public sealed class SettingsPage : PageBase
         var settings = Services.Settings;
 
         _systemName.Text = settings.SystemName;
-        SelectOrAdd(_language, settings.Language);
+        SelectOrDefault(_language, settings.Language);
         SelectTimeZone(settings.TimeZoneId);
         SelectOrAdd(_dateFormat, settings.DateFormat);
 
@@ -346,6 +346,17 @@ public sealed class SettingsPage : PageBase
         _useGpu.Checked = settings.UseGpu;
 
         _loading = false;
+    }
+
+    /// <summary>
+    /// Selects a stored value from a fixed list, falling back to the first entry.
+    /// Unlike <see cref="SelectOrAdd"/> this never grows the list, so a value
+    /// saved before an option was withdrawn does not put it back on offer.
+    /// </summary>
+    private static void SelectOrDefault(DarkComboBox combo, string value)
+    {
+        var index = combo.Items.IndexOf(value);
+        combo.SelectedIndex = Math.Max(0, index);
     }
 
     private static void SelectOrAdd(DarkComboBox combo, string value)
