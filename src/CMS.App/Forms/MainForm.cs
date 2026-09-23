@@ -94,18 +94,49 @@ public sealed class MainForm : Form
             new NavItem("settings", "Settings", Icons.Settings, Permissions.SystemSettings)
         };
 
-        // Hide anything this account is not entitled to use.
+        // Two filters, and both have to pass: what this account is entitled to
+        // use, and what the licence actually grants.
         var visible = items
             .Where(i => i.Permission == null || Services.Auth.HasPermission(i.Permission))
+            .Where(i =>
+            {
+                var feature = LicensedFeature(i.Key);
+                return feature.Length == 0 || LicenseGate.Grants(feature);
+            })
             .ToList();
 
         _nav.SetItems(visible);
     }
 
+    /// <summary>
+    /// Which licensed feature a screen belongs to. Screens that are part of
+    /// simply operating the product - the dashboard, the event log, system
+    /// information and settings - are not separately licensed, because an
+    /// installation that cannot reach its own settings cannot be supported.
+    /// </summary>
+    private static string LicensedFeature(string key) => key switch
+    {
+        "live" => CMS.Licensing.LicenseFeatures.LiveView,
+        "cameras" => CMS.Licensing.LicenseFeatures.LiveView,
+        "playback" => CMS.Licensing.LicenseFeatures.Recording,
+        "ptz" => CMS.Licensing.LicenseFeatures.PtzControl,
+        "detection" => CMS.Licensing.LicenseFeatures.ObjectDetection,
+        "faces" => CMS.Licensing.LicenseFeatures.FaceRecognition,
+        "facedb" => CMS.Licensing.LicenseFeatures.FaceRecognition,
+        "attendance" => CMS.Licensing.LicenseFeatures.Attendance,
+        _ => string.Empty
+    };
+
     private void OnLoaded(object? sender, EventArgs e)
     {
         Navigate("dashboard");
         _tick.Start();
+
+        var warning = LicenseGate.ExpiryWarning();
+        if (warning != null)
+        {
+            Services.LogEvent(EventKind.System, warning, EventSeverity.Warning);
+        }
 
         // Bring the cameras up without blocking the first paint.
         Task.Run(async () =>

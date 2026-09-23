@@ -131,8 +131,36 @@ public sealed class DeviceManagementPage : PageBase
         _card.Invalidate();
     }
 
+    /// <summary>
+    /// True when another camera would exceed the licensed ceiling. Checked
+    /// before the dialog opens, so the operator is not asked to fill in details
+    /// for a camera that cannot be saved.
+    /// </summary>
+    private bool AtCameraLimit(int adding = 1)
+    {
+        var limit = LicenseGate.MaxCameras;
+        var existing = Services.Cameras.GetAll().Count;
+
+        if (existing + adding <= limit)
+        {
+            return false;
+        }
+
+        ShowError(
+            "This licence covers " + limit + " camera" + (limit == 1 ? string.Empty : "s") +
+            " and " + existing + " are already configured.\n\n" +
+            "Remove a camera, or contact your supplier to extend the licence.");
+
+        return true;
+    }
+
     private void AddDevice()
     {
+        if (AtCameraLimit())
+        {
+            return;
+        }
+
         using var dialog = new AddDeviceForm();
 
         if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Camera != null)
@@ -211,6 +239,13 @@ public sealed class DeviceManagementPage : PageBase
         using var dialog = new DiscoveryForm();
 
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedDevices.Count == 0)
+        {
+            return;
+        }
+
+        // A network scan can select many devices at once, so the whole batch is
+        // checked before any of it is written rather than stopping part way.
+        if (AtCameraLimit(dialog.SelectedDevices.Count))
         {
             return;
         }

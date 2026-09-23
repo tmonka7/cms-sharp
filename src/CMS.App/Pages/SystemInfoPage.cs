@@ -190,6 +190,8 @@ public sealed class SystemInfoPage : PageBase
             ("Runtime", ".NET Framework " + Environment.Version),
             ("Operating System", Environment.OSVersion.VersionString),
             ("Machine", Environment.MachineName),
+            ("Licence", LicenseGate.Describe()),
+            ("Installation Code", CMS.Licensing.MachineFingerprint.Current),
             ("Database", Services.Database.DatabasePath),
             ("Uptime", _snapshot.UptimeText)
         });

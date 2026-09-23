@@ -6,12 +6,10 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
-    <RootNamespace>CMS.App</RootNamespace>
-    <AssemblyName>CameraManagementSystem</AssemblyName>
-    <!-- OpenCV and ONNX Runtime ship 64-bit native libraries only. -->
+    <RootNamespace>CMS.KeyGen</RootNamespace>
+    <AssemblyName>CMS.KeyGen</AssemblyName>
     <PlatformTarget>x64</PlatformTarget>
     <Platforms>AnyCPU;x64</Platforms>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
   </PropertyGroup>
@@ -21,23 +19,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CMS.Core\CMS.Core.csproj" />
     <ProjectReference Include="..\CMS.Licensing\CMS.Licensing.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="System.Net.Http" />
-  </ItemGroup>
-
   <!--
-    The Models folder ships with the build so the application always has a
-    known place to look. The ONNX weights themselves are dropped in by the
-    operator; their absence is handled at runtime.
+    The generator carries its own copy of the palette rather than linking the
+    application's Theme.cs, because that file also colours camera status and
+    event severity and so depends on CMS.Core. Referencing it here would pull
+    OpenCV, ONNX Runtime, SQLite and MongoDB into a tool that signs text files.
   -->
   <ItemGroup>
-    <None Include="Models\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <Reference Include="System.Drawing" />
   </ItemGroup>
 
 </Project>

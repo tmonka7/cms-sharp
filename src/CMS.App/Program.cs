@@ -23,6 +23,13 @@ internal static class Program
         Application.ThreadException += (s, e) => ReportFatal(e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (s, e) => ReportFatal(e.ExceptionObject as Exception);
 
+        // The licence is checked before the database is opened or any camera is
+        // touched, so an unlicensed copy does no work at all.
+        if (!LicenseGate.Ensure())
+        {
+            return;
+        }
+
         try
         {
             Services = new AppServices();
