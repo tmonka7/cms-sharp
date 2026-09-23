@@ -299,6 +299,191 @@ public sealed class OnvifPtzClient
         return url;
     }
 
+
+    // ---- Absolute positioning ----
+    //
+    // The attendance sweep has to go to a known place and come back to it.
+    // Continuous and relative moves cannot do that: they carry no reference
+    // point, and the mechanical inertia means an identical command covers a
+    // different arc each time it is issued.
+
+    /// <summary>Moves to an absolute position in the normalised PTZ space.</summary>
+    public async Task AbsoluteMoveAsync(
+        PtzPosition position,
+        float speed = 0.5f,
+        CancellationToken cancellationToken = default)
+    {
+        var ptzUrl = await RequirePtzUrlAsync(cancellationToken).ConfigureAwait(false);
+
+        var request = new XElement(
+            OnvifNamespaces.Ptz + "AbsoluteMove",
+            new XElement(OnvifNamespaces.Ptz + "ProfileToken", ProfileToken),
+            new XElement(
+                OnvifNamespaces.Ptz + "Position",
+                new XElement(
+                    OnvifNamespaces.Schema + "PanTilt",
+                    new XAttribute("x", Format(position.Pan)),
+                    new XAttribute("y", Format(position.Tilt))),
+                new XElement(
+                    OnvifNamespaces.Schema + "Zoom",
+                    new XAttribute("x", Format(position.Zoom)))),
+            new XElement(
+                OnvifNamespaces.Ptz + "Speed",
+                new XElement(
+                    OnvifNamespaces.Schema + "PanTilt",
+                    new XAttribute("x", Format(speed)),
+                    new XAttribute("y", Format(speed))),
+                new XElement(
+                    OnvifNamespaces.Schema + "Zoom",
+                    new XAttribute("x", Format(speed)))));
+
+        await _device.Soap.InvokeAsync(ptzUrl, request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reads where the camera is, and whether it is still moving.</summary>
+    public async Task<PtzStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var ptzUrl = await RequirePtzUrlAsync(cancellationToken).ConfigureAwait(false);
+
+        var response = await _device.Soap.InvokeAsync(
+            ptzUrl,
+            new XElement(
+                OnvifNamespaces.Ptz + "GetStatus",
+                new XElement(OnvifNamespaces.Ptz + "ProfileToken", ProfileToken)),
+            cancellationToken).ConfigureAwait(false);
+
+        var status = new PtzStatus();
+        var descendants = response.Descendants().ToList();
+
+        var panTilt = descendants.FirstOrDefault(e => e.Name.LocalName == "PanTilt" && e.Attribute("x") != null);
+        var zoom = descendants.FirstOrDefault(e => e.Name.LocalName == "Zoom" && e.Attribute("x") != null);
+
+        status.Position = new PtzPosition(
+            ReadAttribute(panTilt, "x"),
+            ReadAttribute(panTilt, "y"),
+            ReadAttribute(zoom, "x"));
+
+        var moveStatus = descendants.FirstOrDefault(e => e.Name.LocalName == "MoveStatus");
+        if (moveStatus != null)
+        {
+            status.PanTiltState = moveStatus.Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "PanTilt")?.Value ?? string.Empty;
+            status.ZoomState = moveStatus.Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "Zoom")?.Value ?? string.Empty;
+        }
+
+        // Not every camera returns MoveStatus. Absence is read as idle rather
+        // than as perpetual motion, or the sweep would never take a frame.
+        status.IsMoving = IsMovingState(status.PanTiltState) || IsMovingState(status.ZoomState);
+
+        return status;
+    }
+
+    /// <summary>
+    /// Reads a PTZ node for its mechanical limits. Falls back to the first node
+    /// when no token is supplied.
+    /// </summary>
+    public async Task<PtzNodeInfo> GetNodeAsync(string? nodeToken = null, CancellationToken cancellationToken = default)
+    {
+        var ptzUrl = await RequirePtzUrlAsync(cancellationToken).ConfigureAwait(false);
+
+        var response = await _device.Soap.InvokeAsync(
+            ptzUrl,
+            new XElement(OnvifNamespaces.Ptz + "GetNodes"),
+            cancellationToken).ConfigureAwait(false);
+
+        var nodes = response.Elements().Where(e => e.Name.LocalName == "PTZNode").ToList();
+        if (nodes.Count == 0)
+        {
+            return new PtzNodeInfo();
+        }
+
+        var node = nodes.FirstOrDefault(n =>
+                       !string.IsNullOrEmpty(nodeToken) &&
+                       string.Equals(n.Attribute("token")?.Value, nodeToken, StringComparison.OrdinalIgnoreCase))
+                   ?? nodes[0];
+
+        var info = new PtzNodeInfo
+        {
+            Token = node.Attribute("token")?.Value ?? string.Empty,
+            Name = node.Elements().FirstOrDefault(e => e.Name.LocalName == "Name")?.Value ?? string.Empty,
+            HasHome = string.Equals(
+                node.Elements().FirstOrDefault(e => e.Name.LocalName == "HomeSupported")?.Value,
+                "true",
+                StringComparison.OrdinalIgnoreCase)
+        };
+
+        // The absolute space is the one that matters. A camera that does not
+        // publish it cannot be positioned repeatably, and the sweep refuses to
+        // run rather than producing an arc that drifts on every pass.
+        var spaces = node.Descendants().FirstOrDefault(e => e.Name.LocalName == "SupportedPTZSpaces");
+        if (spaces != null)
+        {
+            var absolutePanTilt = spaces.Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "AbsolutePanTiltPositionSpace");
+
+            if (absolutePanTilt != null)
+            {
+                info.SupportsAbsoluteMove = true;
+                ReadRange(absolutePanTilt, "XRange", out var panMin, out var panMax);
+                ReadRange(absolutePanTilt, "YRange", out var tiltMin, out var tiltMax);
+
+                info.PanMin = panMin;
+                info.PanMax = panMax;
+                info.TiltMin = tiltMin;
+                info.TiltMax = tiltMax;
+            }
+
+            var absoluteZoom = spaces.Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "AbsoluteZoomPositionSpace");
+
+            if (absoluteZoom != null)
+            {
+                ReadRange(absoluteZoom, "XRange", out var zoomMin, out var zoomMax);
+                info.ZoomMin = zoomMin;
+                info.ZoomMax = zoomMax;
+            }
+        }
+
+        return info;
+    }
+
+    private static bool IsMovingState(string state)
+        => !string.IsNullOrEmpty(state) && !state.Equals("IDLE", StringComparison.OrdinalIgnoreCase);
+
+    private static float ReadAttribute(XElement? element, string name)
+    {
+        var raw = element?.Attribute(name)?.Value;
+        return float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0f;
+    }
+
+    private static void ReadRange(XElement space, string rangeName, out float min, out float max)
+    {
+        min = -1f;
+        max = 1f;
+
+        var range = space.Elements().FirstOrDefault(e => e.Name.LocalName == rangeName);
+        if (range == null)
+        {
+            return;
+        }
+
+        var minText = range.Elements().FirstOrDefault(e => e.Name.LocalName == "Min")?.Value;
+        var maxText = range.Elements().FirstOrDefault(e => e.Name.LocalName == "Max")?.Value;
+
+        if (float.TryParse(minText, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedMin))
+        {
+            min = parsedMin;
+        }
+
+        if (float.TryParse(maxText, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedMax))
+        {
+            max = parsedMax;
+        }
+    }
+
     private static string Format(float value)
         => value.ToString("0.###", CultureInfo.InvariantCulture);
 }

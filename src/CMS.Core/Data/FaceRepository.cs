@@ -4,11 +4,25 @@ using CMS.Core.Models;
 
 namespace CMS.Core.Data;
 
-public sealed class FaceRepository
+public sealed class FaceRepository : IFaceStore
 {
     private readonly AppDatabase _database;
 
     public FaceRepository(AppDatabase database) => _database = database;
+
+    /// <summary>The local file is always reachable; only MongoDB can be down.</summary>
+    public bool IsAvailable => true;
+
+    public string? LastError => null;
+
+    public string Describe() => "SQLite " + _database.DatabasePath;
+
+    // The interface returns identifiers as text so that a MongoDB ObjectId and
+    // a SQLite rowid can both satisfy it.
+    string IFaceStore.Insert(FaceRecord record)
+        => Insert(record).ToString(CultureInfo.InvariantCulture);
+
+    void IFaceStore.Delete(FaceRecord record) => Delete(record.Id);
 
     public List<FaceRecord> GetAll()
     {

@@ -47,6 +47,17 @@ public sealed class SettingsPage : PageBase
     private readonly DarkLabel _faceThresholdValue = new DarkLabel { Font = Theme.SmallBold, ForeColor = Theme.TextPrimary, Alignment = ContentAlignment.MiddleRight };
     private readonly DarkCheckBox _useGpu = new DarkCheckBox { Text = "Use GPU acceleration when available" };
     private readonly FlatButton _reloadModels = new FlatButton { Variant = ButtonVariant.Secondary, Text = "Reload Models", Size = new Size(132, 32) };
+    private readonly DarkCheckBox _alignFaces = new DarkCheckBox { Text = "Align faces to landmarks before matching" };
+
+    private readonly DarkCheckBox _attendanceEnabled = new DarkCheckBox { Text = "Enable attendance (stores faces in MongoDB)" };
+    private readonly DarkTextBox _mongoConnection = new DarkTextBox { Placeholder = "mongodb://localhost:27017" };
+    private readonly DarkTextBox _mongoDatabase = new DarkTextBox { Placeholder = "cms" };
+    private readonly DarkTextBox _sweepArc = new DarkTextBox { Suffix = "deg" };
+    private readonly DarkTextBox _sweepFov = new DarkTextBox { Suffix = "deg" };
+    private readonly DarkTextBox _sweepSettle = new DarkTextBox { Suffix = "ms" };
+    private readonly DarkTextBox _sweepFrames = new DarkTextBox();
+    private readonly DarkCheckBox _sweepEnrolUnknown = new DarkCheckBox { Text = "Register people who are not already enrolled" };
+    private readonly FlatButton _testMongo = new FlatButton { Variant = ButtonVariant.Secondary, Text = "Test Connection", Size = new Size(140, 32) };
 
     private readonly Dictionary<string, List<Control>> _groups = new Dictionary<string, List<Control>>(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Label, Control Field)>> _rows =
@@ -67,6 +78,7 @@ public sealed class SettingsPage : PageBase
         _defaults.Click += (s, e) => RestoreDefaults();
         _browseStorage.Click += (s, e) => BrowseStorage();
         _reloadModels.Click += (s, e) => ReloadModels();
+        _testMongo.Click += (s, e) => TestAttendanceDatabase();
         _faceThreshold.ValueChanged += (s, e) =>
         {
             _faceThresholdValue.Text = _faceThreshold.Value.ToString("0.00");
@@ -89,7 +101,7 @@ public sealed class SettingsPage : PageBase
         _categories.DrawMode = DrawMode.OwnerDrawFixed;
         _categories.IntegralHeight = false;
 
-        _categories.Items.AddRange(new object[] { "General", "Network", "Storage", "AI Models" });
+        _categories.Items.AddRange(new object[] { "General", "Network", "Storage", "AI Models", "Attendance" });
         _categories.SelectedIndex = 0;
 
         _categories.DrawItem += OnDrawCategory;
@@ -177,11 +189,23 @@ public sealed class SettingsPage : PageBase
             ("Detection Interval", _detectionInterval)
         };
 
+        _rows["Attendance"] = new List<(string, Control)>
+        {
+            ("MongoDB Connection", _mongoConnection),
+            ("MongoDB Database", _mongoDatabase),
+            ("Sweep Arc", _sweepArc),
+            ("Camera Field of View", _sweepFov),
+            ("Settle Time", _sweepSettle),
+            ("Frames per Stop", _sweepFrames)
+        };
+
         _groups["General"] = _rows["General"].Select(r => r.Field).Concat(new Control[] { _startWithSystem }).ToList();
         _groups["Network"] = _rows["Network"].Select(r => r.Field).Concat(new Control[] { _preferTcp }).ToList();
         _groups["Storage"] = _rows["Storage"].Select(r => r.Field).Concat(new Control[] { _browseStorage, _overwrite }).ToList();
         _groups["AI Models"] = _rows["AI Models"].Select(r => r.Field)
-            .Concat(new Control[] { _faceThreshold, _faceThresholdValue, _useGpu, _reloadModels }).ToList();
+            .Concat(new Control[] { _faceThreshold, _faceThresholdValue, _useGpu, _alignFaces, _reloadModels }).ToList();
+        _groups["Attendance"] = _rows["Attendance"].Select(r => r.Field)
+            .Concat(new Control[] { _attendanceEnabled, _sweepEnrolUnknown, _testMongo }).ToList();
 
         foreach (var group in _groups.Values)
         {
@@ -295,8 +319,19 @@ public sealed class SettingsPage : PageBase
                 _faceThreshold.SetBounds(fieldX, y, fieldWidth, 22);
                 y += 36;
                 _useGpu.SetBounds(fieldX, y, fieldWidth, 24);
+                y += 28;
+                _alignFaces.SetBounds(fieldX, y, fieldWidth, 24);
                 y += 34;
                 _reloadModels.SetBounds(fieldX, y, 132, 32);
+                break;
+
+            case "Attendance":
+                y += 12;
+                _attendanceEnabled.SetBounds(fieldX, y, fieldWidth, 24);
+                y += 28;
+                _sweepEnrolUnknown.SetBounds(fieldX, y, fieldWidth, 24);
+                y += 34;
+                _testMongo.SetBounds(fieldX, y, 140, 32);
                 break;
         }
     }
@@ -344,6 +379,16 @@ public sealed class SettingsPage : PageBase
         _faceThreshold.Value = settings.FaceMatchThreshold;
         _faceThresholdValue.Text = settings.FaceMatchThreshold.ToString("0.00");
         _useGpu.Checked = settings.UseGpu;
+        _alignFaces.Checked = settings.AlignFaces;
+
+        _attendanceEnabled.Checked = settings.AttendanceEnabled;
+        _mongoConnection.Text = settings.MongoConnectionString;
+        _mongoDatabase.Text = settings.MongoDatabase;
+        _sweepArc.Text = settings.SweepArcDegrees.ToString("0");
+        _sweepFov.Text = settings.SweepFieldOfViewDegrees.ToString("0");
+        _sweepSettle.Text = settings.SweepSettleMs.ToString();
+        _sweepFrames.Text = settings.SweepFramesPerStop.ToString();
+        _sweepEnrolUnknown.Checked = settings.SweepEnrolUnknown;
 
         _loading = false;
     }
@@ -452,6 +497,16 @@ public sealed class SettingsPage : PageBase
 
         var gpuChanged = settings.UseGpu != _useGpu.Checked;
         settings.UseGpu = _useGpu.Checked;
+        settings.AlignFaces = _alignFaces.Checked;
+
+        settings.AttendanceEnabled = _attendanceEnabled.Checked;
+        settings.MongoConnectionString = _mongoConnection.Text.Trim();
+        settings.MongoDatabase = _mongoDatabase.Text.Trim();
+        settings.SweepArcDegrees = ParseFloat(_sweepArc.Text, settings.SweepArcDegrees);
+        settings.SweepFieldOfViewDegrees = ParseFloat(_sweepFov.Text, settings.SweepFieldOfViewDegrees);
+        settings.SweepSettleMs = ParseInt(_sweepSettle.Text, settings.SweepSettleMs);
+        settings.SweepFramesPerStop = ParseInt(_sweepFrames.Text, settings.SweepFramesPerStop);
+        settings.SweepEnrolUnknown = _sweepEnrolUnknown.Checked;
 
         Services.SaveSettings(settings);
         Services.LogEvent(EventKind.System, "Settings updated.");
@@ -512,6 +567,45 @@ public sealed class SettingsPage : PageBase
 
         MessageBox.Show(this, message, "AI Models", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
+
+    /// <summary>
+    /// Saves first, then reconnects, so the button tests what is actually
+    /// configured rather than what was configured last time.
+    /// </summary>
+    private void TestAttendanceDatabase()
+    {
+        Save();
+
+        var connected = Services.ReconnectAttendanceDatabase();
+
+        var message = connected
+            ? "Connected to " + Services.Mongo.Describe() + "."
+            : "Could not connect: " + (Services.Mongo.LastError ?? "unknown error");
+
+        if (connected)
+        {
+            var incompatible = Services.FaceRecognition.IncompatibleRecords;
+            message += Environment.NewLine + Environment.NewLine +
+                       "Enrolled identities: " + Services.FaceRecognition.GalleryCount;
+
+            if (incompatible > 0)
+            {
+                message += Environment.NewLine + incompatible +
+                           " further record(s) were enrolled under a different alignment" +
+                           " setting and are excluded from matching.";
+            }
+        }
+
+        MessageBox.Show(this, message, "Attendance Database",
+            MessageBoxButtons.OK,
+            connected ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
+    private static float ParseFloat(string text, float fallback)
+        => float.TryParse(text, System.Globalization.NumberStyles.Float,
+               System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value
+            : fallback;
 
     private static int ParseInt(string text, int fallback)
         => int.TryParse(text, out var value) && value >= 0 ? value : fallback;

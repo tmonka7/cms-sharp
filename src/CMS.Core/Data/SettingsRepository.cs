@@ -55,6 +55,19 @@ public sealed class SettingsRepository
         settings.FaceMatchThreshold = ReadFloat(values, "face.threshold", settings.FaceMatchThreshold);
         settings.FaceRecognitionEnabled = ReadBool(values, "face.enabled", settings.FaceRecognitionEnabled);
         settings.UseGpu = ReadBool(values, "ai.useGpu", settings.UseGpu);
+        settings.AlignFaces = ReadBool(values, "ai.alignFaces", settings.AlignFaces);
+
+        settings.AttendanceEnabled = ReadBool(values, "attendance.enabled", settings.AttendanceEnabled);
+        settings.MongoConnectionString = Read(values, "attendance.mongoConnection", settings.MongoConnectionString);
+        settings.MongoDatabase = Read(values, "attendance.mongoDatabase", settings.MongoDatabase);
+        settings.SweepArcDegrees = ReadFloat(values, "attendance.arcDegrees", settings.SweepArcDegrees);
+        settings.SweepFieldOfViewDegrees = ReadFloat(values, "attendance.fovDegrees", settings.SweepFieldOfViewDegrees);
+        settings.SweepOverlapFraction = ReadFloat(values, "attendance.overlap", settings.SweepOverlapFraction);
+        settings.SweepZoom = ReadFloat(values, "attendance.zoom", settings.SweepZoom);
+        settings.SweepSettleMs = ReadInt(values, "attendance.settleMs", settings.SweepSettleMs);
+        settings.SweepFramesPerStop = ReadInt(values, "attendance.framesPerStop", settings.SweepFramesPerStop);
+        settings.SweepClusterCosine = ReadFloat(values, "attendance.clusterCosine", settings.SweepClusterCosine);
+        settings.SweepEnrolUnknown = ReadBool(values, "attendance.enrolUnknown", settings.SweepEnrolUnknown);
 
         return settings;
     }
@@ -91,7 +104,20 @@ public sealed class SettingsRepository
             ["face.embedderPath"] = settings.FaceEmbedderPath,
             ["face.threshold"] = settings.FaceMatchThreshold.ToString("R", CultureInfo.InvariantCulture),
             ["face.enabled"] = settings.FaceRecognitionEnabled ? "1" : "0",
-            ["ai.useGpu"] = settings.UseGpu ? "1" : "0"
+            ["ai.useGpu"] = settings.UseGpu ? "1" : "0",
+            ["ai.alignFaces"] = settings.AlignFaces ? "1" : "0",
+
+            ["attendance.enabled"] = settings.AttendanceEnabled ? "1" : "0",
+            ["attendance.mongoConnection"] = settings.MongoConnectionString,
+            ["attendance.mongoDatabase"] = settings.MongoDatabase,
+            ["attendance.arcDegrees"] = settings.SweepArcDegrees.ToString("R", CultureInfo.InvariantCulture),
+            ["attendance.fovDegrees"] = settings.SweepFieldOfViewDegrees.ToString("R", CultureInfo.InvariantCulture),
+            ["attendance.overlap"] = settings.SweepOverlapFraction.ToString("R", CultureInfo.InvariantCulture),
+            ["attendance.zoom"] = settings.SweepZoom.ToString("R", CultureInfo.InvariantCulture),
+            ["attendance.settleMs"] = settings.SweepSettleMs.ToString(CultureInfo.InvariantCulture),
+            ["attendance.framesPerStop"] = settings.SweepFramesPerStop.ToString(CultureInfo.InvariantCulture),
+            ["attendance.clusterCosine"] = settings.SweepClusterCosine.ToString("R", CultureInfo.InvariantCulture),
+            ["attendance.enrolUnknown"] = settings.SweepEnrolUnknown ? "1" : "0"
         };
 
         using var connection = _database.OpenConnection();

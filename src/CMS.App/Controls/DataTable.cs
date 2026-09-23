@@ -133,8 +133,19 @@ public class DataTable : Control
 
     public bool ShowRowNumbers { get; set; }
 
-    /// <summary>Width reserved for the actions column.</summary>
-    public int ActionsWidth => _actions.Count == 0 ? 0 : (_actions.Count * 30) + 10;
+    /// <summary>
+    /// Width reserved for the actions column.
+    ///
+    /// The icons need 30px each, but the header above them reads "Operation",
+    /// which is wider than a single icon. Reserving only the icon width clips
+    /// the header on any table that offers just one action.
+    /// </summary>
+    public int ActionsWidth => _actions.Count == 0
+        ? 0
+        : Math.Max((_actions.Count * 30) + 10, MinimumActionsWidth);
+
+    /// <summary>Enough for the "Operation" header at the header font.</summary>
+    private const int MinimumActionsWidth = 68;
 
     public IReadOnlyList<object> Rows => _rows;
 
@@ -422,8 +433,11 @@ public class DataTable : Control
         if (_actions.Count > 0)
         {
             var right = Width - (_scrollBar.Visible ? _scrollBar.Width : 0) - 8;
+
+            // Drawn across the whole reserved width, not just the icon strip,
+            // so the header is not clipped when there is a single action.
             Theme.DrawText(g, "Operation", Theme.SmallBold, Theme.TextSecondary,
-                new Rectangle(right - (_actions.Count * 30), 0, _actions.Count * 30, HeaderHeight),
+                new Rectangle(right - ActionsWidth, 0, ActionsWidth, HeaderHeight),
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }

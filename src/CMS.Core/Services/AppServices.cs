@@ -1,5 +1,7 @@
 using CMS.Core.Ai;
+using CMS.Core.Attendance;
 using CMS.Core.Data;
+using CMS.Core.Data.Mongo;
 using CMS.Core.Models;
 using CMS.Core.Streaming;
 
@@ -30,8 +32,35 @@ public sealed class AppServices : IDisposable
         Auth = new AuthService(Users);
         Auth.EnsureSeedUser();
 
+        // The gallery moves to MongoDB when attendance is enabled; everything
+        // else stays local. A server that is down is reported, not fatal, so the
+        // rest of the product still starts.
+        Mongo = new MongoContext(Settings);
+
+        if (Settings.AttendanceEnabled)
+        {
+            Mongo.Connect();
+        }
+
+        MongoFaces = new MongoFaceRepository(Mongo);
+        AttendanceStore = new MongoAttendanceRepository(Mongo);
+
+        FaceStore = Settings.AttendanceEnabled && Mongo.IsConnected
+            ? (IFaceStore)MongoFaces
+            : Faces;
+
         Streams = new StreamManager();
-        FaceRecognition = new FaceRecognitionService(Faces);
+        FaceRecognition = new FaceRecognitionService(FaceStore)
+        {
+            AlignFaces = Settings.AlignFaces
+        };
+
+        AttendanceSweeps = new AttendanceSweepService(
+            FaceRecognition,
+            Streams,
+            FaceStore,
+            AttendanceStore);
+
         Analytics = new AnalyticsEngine(Settings, FaceRecognition, Events);
         Recording = new RecordingService(Recordings, Settings);
         Monitor = new SystemMonitor(Settings.StorageRoot);
@@ -51,6 +80,18 @@ public sealed class AppServices : IDisposable
     public UserRepository Users { get; }
 
     public FaceRepository Faces { get; }
+
+    /// <summary>The MongoDB connection used by the gallery and attendance.</summary>
+    public MongoContext Mongo { get; }
+
+    public MongoFaceRepository MongoFaces { get; }
+
+    public MongoAttendanceRepository AttendanceStore { get; }
+
+    /// <summary>Whichever store the gallery is actually using right now.</summary>
+    public IFaceStore FaceStore { get; private set; }
+
+    public AttendanceSweepService AttendanceSweeps { get; }
 
     public EventRepository Events { get; }
 
@@ -83,11 +124,52 @@ public sealed class AppServices : IDisposable
 
     public void SaveSettings(AppSettings settings)
     {
+        var alignmentChanged = settings.AlignFaces != Settings.AlignFaces;
+
         Settings = settings;
         SettingsStore.Save(settings);
         Analytics.ApplySettings(settings);
         Recording.ApplySettings(settings);
         Monitor.SetStorageRoot(settings.StorageRoot);
+
+        ApplyGallerySettings(settings, alignmentChanged);
+    }
+
+    /// <summary>
+    /// Points the gallery at whichever store the settings now call for, and
+    /// reloads it when the alignment setting has changed - existing enrolments
+    /// made the other way have to be excluded from matching.
+    /// </summary>
+    private void ApplyGallerySettings(AppSettings settings, bool alignmentChanged)
+    {
+        var wasConnected = Mongo.IsConnected;
+
+        if (settings.AttendanceEnabled)
+        {
+            Mongo.Reconnect(settings);
+        }
+
+        var store = settings.AttendanceEnabled && Mongo.IsConnected
+            ? (IFaceStore)MongoFaces
+            : Faces;
+
+        var storeChanged = !ReferenceEquals(store, FaceStore) || wasConnected != Mongo.IsConnected;
+        FaceStore = store;
+
+        FaceRecognition.AlignFaces = settings.AlignFaces;
+
+        if (alignmentChanged || storeChanged)
+        {
+            FaceRecognition.ReloadGallery();
+        }
+    }
+
+    /// <summary>Reconnects to MongoDB on demand, for the Settings screen.</summary>
+    public bool ReconnectAttendanceDatabase()
+    {
+        var connected = Mongo.Reconnect(Settings);
+        ApplyGallerySettings(Settings, alignmentChanged: false);
+        return connected;
     }
 
     /// <summary>Records a system-level event, e.g. a login or a settings change.</summary>
@@ -156,6 +238,7 @@ public sealed class AppServices : IDisposable
         Recording.Dispose();
         Analytics.Dispose();
         FaceRecognition.Dispose();
+        Mongo.Dispose();
         Streams.Dispose();
     }
 }

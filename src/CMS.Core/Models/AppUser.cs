@@ -51,6 +51,8 @@ public static class Permissions
     public const string UserManagement = "user_management";
     public const string PtzControl = "ptz_control";
 
+    public const string Attendance = "attendance";
+
     /// <summary>Key plus display label, in the order the checklist shows them.</summary>
     public static readonly KeyValuePair<string, string>[] All =
     {
@@ -60,6 +62,7 @@ public static class Permissions
         new KeyValuePair<string, string>(FaceRecognition, "Face Recognition"),
         new KeyValuePair<string, string>(ObjectDetection, "Object Detection"),
         new KeyValuePair<string, string>(PtzControl, "PTZ Control"),
+        new KeyValuePair<string, string>(Attendance, "Attendance"),
         new KeyValuePair<string, string>(SystemSettings, "System Settings"),
         new KeyValuePair<string, string>(UserManagement, "User Management")
     };
@@ -71,7 +74,7 @@ public static class Permissions
             case UserRole.Administrator:
                 return All.Select(p => p.Key);
             case UserRole.Operator:
-                return new[] { LiveView, Playback, FaceRecognition, ObjectDetection, PtzControl };
+                return new[] { LiveView, Playback, FaceRecognition, ObjectDetection, PtzControl, Attendance };
             default:
                 return new[] { LiveView, Playback };
         }

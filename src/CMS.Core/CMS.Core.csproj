@@ -19,6 +19,9 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.Extensions" Version="4.10.0.20241108" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+    <!-- 2.30 is the last 2.x release and the newest that supports net47;
+         MongoDB.Driver 3.x requires net472 or later. -->
+    <PackageReference Include="MongoDB.Driver" Version="2.30.0" />
   </ItemGroup>
 
   <ItemGroup>

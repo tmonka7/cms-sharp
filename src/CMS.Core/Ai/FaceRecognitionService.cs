@@ -13,16 +13,36 @@ public sealed class FaceRecognitionService : IDisposable
 {
     private readonly FaceDetector _detector = new FaceDetector();
     private readonly FaceEmbedder _embedder = new FaceEmbedder();
-    private readonly FaceRepository _repository;
+    private readonly IFaceStore _repository;
     private readonly ReaderWriterLockSlim _galleryLock = new ReaderWriterLockSlim();
     private List<FaceRecord> _gallery = new List<FaceRecord>();
+    private int _incompatibleRecords;
     private bool _disposed;
 
-    public FaceRecognitionService(FaceRepository repository)
+    public FaceRecognitionService(IFaceStore repository)
     {
         _repository = repository;
         ReloadGallery();
     }
+
+    /// <summary>
+    /// Warp the crop onto the canonical template before embedding. Changing this
+    /// changes every embedding the service produces, so records are stamped with
+    /// the setting they were made under and only like is compared with like.
+    /// </summary>
+    public bool AlignFaces { get; set; } = true;
+
+    /// <summary>
+    /// Enrolments in the store that were made under a different alignment
+    /// setting and are therefore excluded from matching. A non-zero count means
+    /// those people will not be recognised until they are enrolled again.
+    /// </summary>
+    public int IncompatibleRecords => _incompatibleRecords;
+
+    public string EmbeddingVersion
+        => AlignFaces ? FaceEmbeddingVersions.Aligned : FaceEmbeddingVersions.Legacy;
+
+    public IFaceStore Store => _repository;
 
     public bool IsReady => _detector.IsReady && _embedder.IsReady;
 
@@ -88,19 +108,56 @@ public sealed class FaceRecognitionService : IDisposable
     /// <summary>Re-reads the enrolled faces from SQLite into the match cache.</summary>
     public void ReloadGallery()
     {
-        var records = _repository.GetAll()
+        var all = _repository.GetAll()
             .Where(r => r.Enabled && r.Embedding.Length > 0)
+            .ToList();
+
+        var version = EmbeddingVersion;
+
+        // Embeddings made from an aligned crop and from a plain one do not
+        // compare meaningfully. Including both would not raise an error, it
+        // would just quietly fail to recognise half the gallery, so the
+        // mismatched records are excluded and counted instead.
+        var records = all
+            .Where(r => FaceEmbeddingVersions.Comparable(r.EmbeddingVersion, version))
             .ToList();
 
         _galleryLock.EnterWriteLock();
         try
         {
             _gallery = records;
+            _incompatibleRecords = all.Count - records.Count;
         }
         finally
         {
             _galleryLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>Faces in a frame with their landmarks, for callers that align themselves.</summary>
+    public List<FaceBox> DetectFaces(Mat frame) => _detector.DetectFaces(frame);
+
+    /// <summary>Embeds a crop that has already been aligned to the template.</summary>
+    public float[] EmbedAligned(Mat alignedCrop) => _embedder.Embed(alignedCrop);
+
+    /// <summary>
+    /// Prepares a detected face for embedding: an aligned warp when alignment is
+    /// on and the detector supplied landmarks, otherwise the plain margin crop.
+    /// </summary>
+    public Mat? PrepareCrop(Mat frame, FaceBox face)
+    {
+        if (AlignFaces && face.HasLandmarks)
+        {
+            var aligned = FaceAligner.Align(frame, face.Landmarks);
+            if (aligned != null && !aligned.Empty())
+            {
+                return aligned;
+            }
+
+            aligned?.Dispose();
+        }
+
+        return CropFace(frame, face.Box);
     }
 
     /// <summary>Finds and identifies every face in one frame.</summary>
@@ -112,12 +169,14 @@ public sealed class FaceRecognitionService : IDisposable
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var boxes = _detector.Detect(frame);
-        var matches = new List<FaceMatch>(boxes.Count);
+        var faces = _detector.DetectFaces(frame);
+        var matches = new List<FaceMatch>(faces.Count);
 
-        foreach (var box in boxes)
+        foreach (var face in faces)
         {
-            using var crop = CropFace(frame, box);
+            // Live matching prepares the crop exactly as enrolment does, or the
+            // probe and the gallery would sit in different spaces.
+            using var crop = PrepareCrop(frame, face);
             if (crop == null || crop.Empty())
             {
                 continue;
@@ -126,14 +185,14 @@ public sealed class FaceRecognitionService : IDisposable
             var embedding = _embedder.Embed(crop);
             if (embedding.Length == 0)
             {
-                matches.Add(new FaceMatch { Box = box });
+                matches.Add(new FaceMatch { Box = face.Box });
                 continue;
             }
 
             var best = FindBestMatch(embedding);
             matches.Add(new FaceMatch
             {
-                Box = box,
+                Box = face.Box,
                 Record = best.Similarity >= MatchThreshold ? best.Record : null,
                 Similarity = best.Similarity
             });
@@ -160,16 +219,16 @@ public sealed class FaceRecognitionService : IDisposable
             return null;
         }
 
-        var boxes = _detector.Detect(image);
-        if (boxes.Count == 0)
+        var faces = _detector.DetectFaces(image);
+        if (faces.Count == 0)
         {
             return null;
         }
 
         // The largest face is the subject of an enrolment photo.
-        var box = boxes.OrderByDescending(b => b.Area).First();
+        var face = faces.OrderByDescending(f => f.Box.Area).First();
 
-        using var crop = CropFace(image, box);
+        using var crop = PrepareCrop(image, face);
         if (crop == null || crop.Empty())
         {
             return null;
@@ -189,10 +248,12 @@ public sealed class FaceRecognitionService : IDisposable
             Embedding = embedding,
             Thumbnail = EncodeThumbnail(crop),
             RegisteredUtc = DateTime.UtcNow,
-            Enabled = true
+            Enabled = true,
+            EmbeddingVersion = EmbeddingVersion,
+            CaptureCount = 1
         };
 
-        _repository.Insert(record);
+        record.DocumentId = _repository.Insert(record);
         ReloadGallery();
         return record;
     }

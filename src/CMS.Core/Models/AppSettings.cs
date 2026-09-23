@@ -74,6 +74,51 @@ public sealed class AppSettings
 
     public bool UseGpu { get; set; }
 
+    /// <summary>
+    /// Align the crop to the detector landmarks before embedding. Turning this
+    /// off reverts to the older plain crop; the two produce embeddings that must
+    /// not be compared with each other, which is why every record carries the
+    /// version it was made with.
+    /// </summary>
+    public bool AlignFaces { get; set; } = true;
+
+    // ---- Attendance and MongoDB ----
+
+    /// <summary>
+    /// The gallery and attendance live in MongoDB when this is on. Everything
+    /// else stays in the local SQLite file, so the product still starts and
+    /// shows video when the server is unreachable.
+    /// </summary>
+    public bool AttendanceEnabled { get; set; }
+
+    public string MongoConnectionString { get; set; } = "mongodb://localhost:27017";
+
+    public string MongoDatabase { get; set; } = "cms";
+
+    /// <summary>Arc the automatic sweep covers, centred on the current view.</summary>
+    public float SweepArcDegrees { get; set; } = 180f;
+
+    /// <summary>
+    /// Horizontal field of view assumed at the sweep zoom. ONVIF does not report
+    /// this, and setting it too wide leaves unswept gaps between stops.
+    /// </summary>
+    public float SweepFieldOfViewDegrees { get; set; } = 30f;
+
+    public float SweepOverlapFraction { get; set; } = 0.25f;
+
+    public float SweepZoom { get; set; }
+
+    /// <summary>Time allowed for the camera to stop moving before a frame is taken.</summary>
+    public int SweepSettleMs { get; set; } = 900;
+
+    public int SweepFramesPerStop { get; set; } = 4;
+
+    /// <summary>Raw cosine above which two captures in one sweep are the same person.</summary>
+    public float SweepClusterCosine { get; set; } = 0.50f;
+
+    /// <summary>Register people the sweep finds who match nobody already enrolled.</summary>
+    public bool SweepEnrolUnknown { get; set; } = true;
+
     public AppSettings Clone()
     {
         var copy = (AppSettings)MemberwiseClone();

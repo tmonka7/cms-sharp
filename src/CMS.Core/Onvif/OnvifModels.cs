@@ -97,3 +97,79 @@ public sealed class OnvifDeviceProbeResult
 
     public bool PtzSupported { get; set; }
 }
+
+/// <summary>
+/// A PTZ position in the camera's normalised space, where pan and tilt run from
+/// -1 to 1 across the full mechanical range and zoom from 0 to 1.
+/// </summary>
+public struct PtzPosition
+{
+    public PtzPosition(float pan, float tilt, float zoom)
+    {
+        Pan = pan;
+        Tilt = tilt;
+        Zoom = zoom;
+    }
+
+    public float Pan { get; set; }
+
+    public float Tilt { get; set; }
+
+    public float Zoom { get; set; }
+
+    public override string ToString()
+        => "pan " + Pan.ToString("0.###") + ", tilt " + Tilt.ToString("0.###") + ", zoom " + Zoom.ToString("0.###");
+}
+
+/// <summary>Where the camera is now, and whether it is still moving.</summary>
+public sealed class PtzStatus
+{
+    public PtzPosition Position { get; set; }
+
+    /// <summary>True while any axis reports a state other than IDLE.</summary>
+    public bool IsMoving { get; set; }
+
+    public string PanTiltState { get; set; } = string.Empty;
+
+    public string ZoomState { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The mechanical limits a PTZ node reports. The pan range is what turns a
+/// requested sweep in degrees into normalised positions; without it the same
+/// request would cover a different arc on every camera model.
+/// </summary>
+public sealed class PtzNodeInfo
+{
+    public string Token { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public float PanMin { get; set; } = -1f;
+
+    public float PanMax { get; set; } = 1f;
+
+    public float TiltMin { get; set; } = -1f;
+
+    public float TiltMax { get; set; } = 1f;
+
+    public float ZoomMin { get; set; }
+
+    public float ZoomMax { get; set; } = 1f;
+
+    /// <summary>
+    /// Degrees of pan covered by the full normalised range. ONVIF does not
+    /// report this directly, so it defaults to a full revolution and can be
+    /// corrected per camera in settings.
+    /// </summary>
+    public float PanRangeDegrees { get; set; } = 360f;
+
+    public bool SupportsAbsoluteMove { get; set; }
+
+    public bool HasHome { get; set; }
+
+    /// <summary>Normalised units per degree of pan.</summary>
+    public float UnitsPerDegree => PanRangeDegrees <= 0f
+        ? 0f
+        : (PanMax - PanMin) / PanRangeDegrees;
+}

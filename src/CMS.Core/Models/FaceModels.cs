@@ -21,6 +21,29 @@ public sealed class FaceRecord
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Identifier when this record lives in MongoDB rather than SQLite.</summary>
+    public string DocumentId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True when the record was created automatically from a sweep and nobody
+    /// has named it yet. A provisional identity still matches, so the same
+    /// person is recognised on later sweeps, but it is not a claim about who
+    /// they are.
+    /// </summary>
+    public bool Provisional { get; set; }
+
+    /// <summary>
+    /// How the crop was prepared before embedding. Embeddings made from an
+    /// aligned crop do not compare meaningfully against ones made from a plain
+    /// crop, so records carrying different versions must not be matched.
+    /// </summary>
+    public string EmbeddingVersion { get; set; } = FaceEmbeddingVersions.Legacy;
+
+    /// <summary>How many accepted captures have been merged into this identity.</summary>
+    public int CaptureCount { get; set; }
+
+    public DateTime? LastSeenUtc { get; set; }
+
     public string GroupText => Group switch
     {
         FaceGroup.Employee => "Employee",
@@ -59,4 +82,30 @@ public sealed class FaceFrameResult
     public IList<FaceMatch> Matches { get; set; } = new List<FaceMatch>();
 
     public double InferenceMs { get; set; }
+}
+
+/// <summary>
+/// Identifies how a face crop was prepared before embedding.
+///
+/// This exists because enabling landmark alignment changes every embedding the
+/// model produces. Measured on the reference faces, an aligned and an unaligned
+/// embedding of the same person score around 0.35 raw cosine - well below the
+/// match threshold. A gallery holding both kinds would silently fail to
+/// recognise its own enrolments, so the two are never compared.
+/// </summary>
+public static class FaceEmbeddingVersions
+{
+    /// <summary>Box crop with a margin, no landmark alignment.</summary>
+    public const string Legacy = "crop-v1";
+
+    /// <summary>Five-point similarity warp onto the canonical template.</summary>
+    public const string Aligned = "aligned-v1";
+
+    public static string Current => Aligned;
+
+    public static bool Comparable(string a, string b)
+        => string.Equals(
+            string.IsNullOrEmpty(a) ? Legacy : a,
+            string.IsNullOrEmpty(b) ? Legacy : b,
+            StringComparison.OrdinalIgnoreCase);
 }
